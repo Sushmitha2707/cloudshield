@@ -12,3 +12,4 @@ AZURE_CONN_STR = os.getenv(
     "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;",
 )
 STAGING_CONTAINER = "staging"
+CHUNKS_CONTAINER = "chunks"

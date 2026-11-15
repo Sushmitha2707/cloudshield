@@ -15,3 +15,6 @@ def ensure_container(name: str) -> None:
 
 def upload_blob(container: str, name: str, data: bytes) -> None:
     _client.get_blob_client(container, name).upload_blob(data, overwrite=True)
+    
+def download_blob(container: str, name: str) -> bytes:
+    return _client.get_blob_client(container, name).download_blob().readall()

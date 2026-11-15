@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import STAGING_CONTAINER
 from app.database import Base, engine, get_db
+from app.job_queue import enqueue_job
 from app.models import BackupJob, StoredFile
 from app.storage import ensure_container, upload_blob
 
@@ -48,6 +49,7 @@ def create_backup(file: UploadFile, db: Session = Depends(get_db)):
 
     upload_blob(STAGING_CONTAINER, f"job-{job.id}", data)
     db.commit()
+    enqueue_job(job.id)
     return {
         "job_id": job.id,
         "filename": stored.filename,
