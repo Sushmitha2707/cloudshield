@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
+from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -8,8 +9,8 @@ from app.config import STAGING_CONTAINER
 from app.database import Base, engine, get_db
 from app.job_queue import enqueue_job
 from app.models import BackupJob, StoredFile
+from app.restore import IntegrityError, rebuild_file
 from app.storage import ensure_container, upload_blob
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -93,3 +94,26 @@ def list_files(db: Session = Depends(get_db)):
         }
         for f in files
     ]
+
+@app.get("/files/{filename}/versions/{version}/restore")
+def restore_version(filename: str, version: int, db: Session = Depends(get_db)):
+    job = db.scalar(
+        select(BackupJob)
+        .join(StoredFile)
+        .where(StoredFile.filename == filename, BackupJob.version == version)
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail="That file version does not exist")
+    if job.status != "completed":
+        raise HTTPException(status_code=409, detail=f"Backup is not ready (status: {job.status})")
+
+    try:
+        data = rebuild_file(db, job.id)
+    except IntegrityError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
