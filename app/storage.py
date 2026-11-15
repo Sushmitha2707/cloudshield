@@ -18,3 +18,6 @@ def upload_blob(container: str, name: str, data: bytes) -> None:
     
 def download_blob(container: str, name: str) -> bytes:
     return _client.get_blob_client(container, name).download_blob().readall()
+
+def blob_exists(container: str, name: str) -> bool:
+    return _client.get_blob_client(container, name).exists()

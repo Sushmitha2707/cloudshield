@@ -6,7 +6,7 @@ from app.config import CHUNKS_CONTAINER, STAGING_CONTAINER
 from app.database import SessionLocal
 from app.job_queue import dequeue_job
 from app.models import BackupJob, JobChunk
-from app.storage import download_blob, ensure_container, upload_blob
+from app.storage import blob_exists, download_blob, ensure_container, upload_blob
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [worker %(process)d] %(message)s")
 log = logging.getLogger("worker")
@@ -26,15 +26,20 @@ def process_job(job_id: int) -> None:
 
         data = download_blob(STAGING_CONTAINER, f"job-{job_id}")
         count = 0
+        reused = 0
         for index, chunk, checksum in split_into_chunks(data):
-            upload_blob(CHUNKS_CONTAINER, checksum, chunk)
+            if blob_exists(CHUNKS_CONTAINER, checksum):
+                reused += 1
+            else:
+                upload_blob(CHUNKS_CONTAINER, checksum, chunk)
             db.add(JobChunk(job_id=job_id, chunk_index=index,
                             checksum=checksum, size_bytes=len(chunk)))
             count += 1
 
         job.status = "completed"
         db.commit()
-        log.info("job %s: completed, %s chunk(s) stored", job_id, count)
+        log.info("job %s: completed, %s chunk(s): %s new, %s reused",
+            job_id, count, count - reused, reused)
     except Exception as exc:
         db.rollback()
         job = db.get(BackupJob, job_id)
